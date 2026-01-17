@@ -1,8 +1,3 @@
-# ==============================================================================
-# MASTER SCRIPT: ANALISIS JENAYAH KEKERASAN (AUTO-COLOR & ANALYSIS ADDED)
-# ==============================================================================
-
-# 1. SETUP & LIBRARIES
 library(dplyr)
 library(tidyr)
 library(readxl)
@@ -28,31 +23,23 @@ target_kategori <- "Kekerasan"
 nilai_ambang    <- 0.9
 tahun_mula      <- 2016
 tahun_akhir     <- 2023
-
-# --- Lokasi File (Pastikan path betul) ---
 path_negeri <- "C:/Users/admin/OneDrive - Universiti Kebangsaan Malaysia/UKM/DEGREE/SEM 6/FYP/CODING/FINALIZED/OBJEKTIF 2 & 3/OBJEKTIF 02.xlsx"
 path_daerah <- "C:/Users/admin/OneDrive - Universiti Kebangsaan Malaysia/UKM/DEGREE/SEM 6/FYP/CODING/FINALIZED/OBJEKTIF 2 & 3/OBJEKTIF 02 DAERAH.xlsx"
 
-# ==============================================================================
-# BAHAGIAN A: OBJEKTIF 2 (ANALISIS PERINGKAT NEGERI)
-# ==============================================================================
 message(paste(">>> Memulakan Objektif 2: Analisis Negeri (", target_kategori, ")..."))
 
-# 1. Load & Proses Data Negeri
 objektif_02Negeri <- read_excel(path_negeri)
 data_negeri_clean <- objektif_02Negeri %>%
   filter(Kategori == target_kategori, between(Tahun, tahun_mula, tahun_akhir)) %>%
   group_by(Negeri, Jenis, Tahun) %>%
   summarise(n = sum(as.numeric(`Bilangan Jenayah`), na.rm = TRUE), .groups = "drop")
 
-# Lengkapkan Data
 susunan_tahun <- tahun_mula:tahun_akhir
 susunan_jenis <- sort(unique(data_negeri_clean$Jenis))
 data_negeri_lengkap <- data_negeri_clean %>%
   complete(Negeri, Tahun = susunan_tahun, Jenis = susunan_jenis, fill = list(n = 0)) %>%
   arrange(Negeri, Tahun, Jenis)
 
-# Bina Matriks Negeri
 matriks_negeri_wide <- data_negeri_lengkap %>%
   group_by(Negeri) %>%
   summarise(vector = list(n), .groups = "drop") 
@@ -62,13 +49,11 @@ colnames(gabung_objektif_02) <- matriks_negeri_wide$Negeri
 # Kira Korelasi Negeri
 Korelasi_Spearman_Negeri <- cor(gabung_objektif_02, method = "spearman", use = "pairwise.complete.obs")
 
-# 2. Visualisasi Heatmap
 pheatmap(Korelasi_Spearman_Negeri,
          main = paste("Korelasi Spearman Negeri:", target_kategori),
          display_numbers = TRUE, number_format = "%.2f",
          color = colorRampPalette(c("blue", "white", "red"))(100))
 
-# 3. Plot Rangkaian Negeri
 matriks_temp <- Korelasi_Spearman_Negeri
 matriks_temp[lower.tri(matriks_temp, diag = TRUE)] <- NA
 edges_negeri <- as.data.frame(as.table(matriks_temp)) %>%
@@ -96,7 +81,6 @@ plot_negeri <- ggraph(lay_negeri) +
 
 print(plot_negeri)
 
-# 4. Jadual Centrality
 df_Centrality_Negeri <- data.frame(
   Negeri = V(g_negeri)$name,
   Degree = degree(g_negeri),
@@ -108,11 +92,7 @@ rownames(df_Centrality_Negeri) <- NULL
 message("\n>>> JADUAL KIRAAN CENTRALITY (NEGERI) <<<")
 print(df_Centrality_Negeri)
 
-# ==============================================================================
-# BAHAGIAN B: OBJEKTIF 2 (GABUNGAN DAERAH)
-# ==============================================================================
 message(">>> Memulakan Objektif 2: Analisis Gabungan Daerah...")
-
 Daerah_kekerasan <- read_excel(path_daerah)
 df_daerah_raw <- Daerah_kekerasan %>% 
   filter(Kategori == target_kategori, between(Tahun, tahun_mula, tahun_akhir))
@@ -189,11 +169,6 @@ p_network_final <- ggraph(g_clean, layout = "kk") +
 
 print(p_network_final)
 
-# ==============================================================================
-# BAHAGIAN C: OBJEKTIF 3 - LOUVAIN & AUTO COLOR DETERMINATION
-# ==============================================================================
-message(">>> Memulakan Objektif 3: Louvain Negeri & Penentuan Warna...")
-
 # 1. PENGIRAAN KOMUNITI
 set.seed(42)
 comm_negeri <- cluster_louvain(g_negeri, weights = E(g_negeri)$w_abs)
@@ -203,8 +178,6 @@ V(g_negeri)$Label <- paste0("C", V(g_negeri)$community)
 mod_score_negeri <- modularity(comm_negeri)
 num_comm_negeri <- length(unique(membership(comm_negeri)))
 
-# --- LANGKAH PINTAR: TENTUKAN WARNA BERDASARKAN RISIKO ---
-# Kita kira dulu siapa paling bahaya supaya tak perlu teka C1 atau C2
 info_temp <- data.frame(Negeri = V(g_negeri)$name, Label = V(g_negeri)$Label)
 
 ranking_temp <- data_negeri_clean %>%
@@ -222,12 +195,10 @@ ranking_temp <- data_negeri_clean %>%
     )
   )
 
-# Buat vector warna untuk digunakan dalam plot
 warna_final_kekerasan <- setNames(ranking_temp$Warna_Auto, ranking_temp$Label)
 message(">>> Warna telah ditetapkan secara automatik ikut risiko:")
 print(ranking_temp)
 
-# 2. JADUAL KOMUNITI
 comm_df <- tibble(
   Negeri   = V(g_negeri)$name,
   Komuniti = as.integer(V(g_negeri)$community),
@@ -245,7 +216,6 @@ plot_louvain_negeri <- ggraph(g_negeri, layout = "kk") +
   geom_node_point(aes(color = Label), size = 8) +
   geom_node_text(aes(label = name), size = 3.5, fontface = "bold", color = "black") +
   
-  # GUNA WARNA AUTO DI SINI
   scale_fill_manual(values = warna_final_kekerasan, name = "Komuniti (Auto-Risk)") +
   scale_color_manual(values = warna_final_kekerasan, name = "Komuniti (Auto-Risk)") +
   
@@ -255,7 +225,7 @@ plot_louvain_negeri <- ggraph(g_negeri, layout = "kk") +
 
 print(plot_louvain_negeri)
 
-# 4. PETA NEGERI (FIX NA LEGEND & WARNA AUTO)
+# 4. PETA NEGERI
 malaysia_sf <- ne_states(country = "Malaysia", returnclass = "sf")
 malaysia_sf_clean <- malaysia_sf %>%
   mutate(Negeri_Standard = case_when(
@@ -280,11 +250,7 @@ plot_peta_negeri <- ggplot(peta_negeri_final) +
        subtitle = paste("Bil. Komuniti =", num_comm_negeri, "| Q =", round(mod_score_negeri, 3)))
 print(plot_peta_negeri)
 
-# ==============================================================================
-# BAHAGIAN C-2: ANALISIS STATUS KESELAMATAN & PROFIL DOMINASI (ADDED)
-# ==============================================================================
-message(">>> Memulakan Analisis Kesimpulan: Status Keselamatan & Profil...")
-
+# BAHAGIAN C-2: ANALISIS STATUS KESELAMATAN & PROFIL DOMINASI 
 # 1. ANALISIS KESELAMATAN
 analisis_risiko <- data_negeri_clean %>%
   group_by(Negeri) %>%
@@ -360,9 +326,8 @@ plot_profil_dominasi <- ggplot(profil_dominasi, aes(x = Label, y = Peratus, fill
 
 print(plot_profil_dominasi)
 
-# BAHAGIAN D: OBJEKTIF 3 - PETA INDEKS VORONOI (FIX: KL DISTRICTS ADDED)
-# ==============================================================================
-message(">>> Memulakan Objektif 3: Louvain Daerah & Peta Voronoi (KL Pecah)...")
+# BAHAGIAN D: OBJEKTIF 3 - PETA INDEKS VORONOI
+message(">>> Memulakan Objektif 3: Louvain Daerah & Peta 
 
 # 1. Louvain Network
 set.seed(42)
@@ -604,71 +569,6 @@ plot_risiko <- ggplot(data_plot, aes(x = Jenis_Jenayah, y = reorder(Negeri, desc
 
 print(plot_risiko)
 
-# ==============================================================================
-# BAHAGIAN E: ANALISIS PURATA BEBAN JENAYAH (DAERAH)
-# ==============================================================================
-message(">>> Memulakan Analisis Beban Jenayah & Risiko Mengikut Komuniti Daerah...")
-
-# 1. Sediakan Data Jenayah Daerah (Aggregated)
-# Kita perlu ID yang sama dengan dalam Graph (iaitu "Negeri_Daerah")
-analisis_daerah_raw <- df_daerah_raw %>%
-  mutate(ID_Node = paste0(Negeri, "_", Daerah)) %>%
-  group_by(ID_Node) %>%
-  summarise(Total_Kes_Semua_Tahun = sum(Bilangan, na.rm = TRUE), .groups = "drop")
-
-# 2. Dapatkan Info Komuniti Daerah dari Graph (g_clean)
-# Kita filter node yang ada underscore "_" sahaja (sebab itu tanda ia adalah daerah)
-info_komuniti_daerah <- data.frame(
-  ID_Node = V(g_clean)$name,
-  Komuniti = factor(V(g_clean)$community)
-) %>%
-  filter(grepl("_", ID_Node)) # Pastikan hanya ambil node daerah
-
-# 3. Gabungkan & Kira Purata Beban
-analisis_risiko_daerah <- analisis_daerah_raw %>%
-  inner_join(info_komuniti_daerah, by = "ID_Node") %>%
-  group_by(Komuniti) %>%
-  summarise(
-    Bil_Daerah = n(), # Berapa daerah dalam group ni
-    Total_Kes_Komuniti = sum(Total_Kes_Semua_Tahun),
-    # Formula: (Total Kes / 8 Tahun) / Bilangan Daerah
-    Purata_Beban_Tahunan = (Total_Kes_Komuniti / (tahun_akhir - tahun_mula + 1)) / Bil_Daerah
-  ) %>%
-  arrange(desc(Purata_Beban_Tahunan)) %>%
-  mutate(
-    # Guna Quantile: Top 33% (Bahaya), Middle 33% (Sederhana), Bottom 33% (Selamat)
-    Status_Keselamatan = case_when(
-      Purata_Beban_Tahunan >= quantile(Purata_Beban_Tahunan, 0.66) ~ "BERISIKO",
-      Purata_Beban_Tahunan >= quantile(Purata_Beban_Tahunan, 0.33) ~ "SEDERHANA",
-      TRUE ~ "SELAMAT"
-    )
-  )
-
-message("\n>>> JADUAL ANALISIS RISIKO KOMUNITI DAERAH <<<")
-print(analisis_risiko_daerah)
-
-# 4. Visualisasi Bar Chart Risiko Daerah
-plot_risiko_daerah <- ggplot(analisis_risiko_daerah, aes(x = reorder(Komuniti, -Purata_Beban_Tahunan), 
-                                                         y = Purata_Beban_Tahunan, 
-                                                         fill = Status_Keselamatan)) +
-  geom_bar(stat = "identity", width = 0.7) +
-  geom_text(aes(label = round(Purata_Beban_Tahunan, 0)), vjust = -0.5, size = 3, fontface = "bold") +
-  
-  # Warna Manual: Merah, Kuning, Hijau
-  scale_fill_manual(values = c("BERISIKO" = "#FF4D4D",   # Merah
-                               "SEDERHANA" = "#FFD700",           # Kuning
-                               "SELAMAT" = "#66CC66")) + # Hijau
-  
-  theme_minimal() +
-  labs(
-    title = paste("Analisis Risiko Komuniti Daerah:", target_kategori),
-    subtitle = "Klasifikasi berdasarkan Purata Beban Jenayah Tahunan per Daerah",
-    x = "Komuniti Daerah",
-    y = "Purata Kes Setahun (Per Daerah)",
-    fill = "Status Risiko"
-  )
-
-print(plot_risiko_daerah)
 
 # ==============================================================================
 # OBJEKTIF 3: ANALISIS LOUVAIN & PETA VORONOI (FULL & FIXED COLOR)
@@ -891,4 +791,5 @@ Jadual_Indeks <- data_berwarna_index %>%
 message(">>> Selesai. Semak plot Louvain dan Peta.")
 head(Jadual_Indeks)
 view (Jadual_Indeks)
+
 
