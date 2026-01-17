@@ -1,8 +1,4 @@
-# ==============================================================================
-# MASTER SCRIPT: ANALISIS JENAYAH HARTA BENDA (VARIABLES RENAMED _hb)
-# ==============================================================================
 
-# 1. SETUP & LIBRARIES
 library(dplyr)
 library(tidyr)
 library(readxl)
@@ -24,52 +20,38 @@ library(rnaturalearthdata)
 library(geodata)
 library(stringr)
 
-# --- Tetapan Parameter Utama ---
 target_kategori_hb <- "Harta Benda" 
 nilai_ambang_hb    <- 0.9 
 tahun_mula_hb      <- 2016
 tahun_akhir_hb     <- 2023
 
-# --- Lokasi File ---
 path_negeri <- "C:/Users/admin/OneDrive - Universiti Kebangsaan Malaysia/UKM/DEGREE/SEM 6/FYP/CODING/FINALIZED/OBJEKTIF 2 & 3/OBJEKTIF 02.xlsx"
 path_daerah <- "C:/Users/admin/OneDrive - Universiti Kebangsaan Malaysia/UKM/DEGREE/SEM 6/FYP/CODING/FINALIZED/OBJEKTIF 2 & 3/OBJEKTIF 02 DAERAH.xlsx"
 
-# --- TETAPAN WARNA MANUAL (HARTA BENDA) ---
-# C2 = Bahaya (Merah), C1 = Sederhana (Oren), C3 = Selamat (Hijau)
-# (Pastikan ini selari dengan hasil data anda nanti)
 warna_status_hb <- c("C2" = "#D7191C", "C1" = "#FDAE61", "C3" = "#1A9641") 
-
 warna_extra_hb <- scales::hue_pal()(5)
 names(warna_extra_hb) <- paste0("C", 4:8)
 warna_final_gabungan_hb <- c(warna_status_hb, warna_extra_hb)
 
-# ==============================================================================
-# BAHAGIAN A: OBJEKTIF 2 (ANALISIS PERINGKAT NEGERI)
-# ==============================================================================
-message(paste(">>> Memulakan Objektif 2: Analisis Negeri (", target_kategori_hb, ")..."))
-
-# 1. Load & Proses Data Negeri
 objektif_02Negeri_hb <- read_excel(path_negeri)
 data_negeri_clean_hb <- objektif_02Negeri_hb %>%
   filter(Kategori == target_kategori_hb, between(Tahun, tahun_mula_hb, tahun_akhir_hb)) %>%
   group_by(Negeri, Jenis, Tahun) %>%
   summarise(n = sum(as.numeric(`Bilangan Jenayah`), na.rm = TRUE), .groups = "drop")
 
-# Lengkapkan Data
 susunan_tahun_hb <- tahun_mula_hb:tahun_akhir_hb
 susunan_jenis_hb <- sort(unique(data_negeri_clean_hb$Jenis))
 data_negeri_lengkap_hb <- data_negeri_clean_hb %>%
   complete(Negeri, Tahun = susunan_tahun_hb, Jenis = susunan_jenis_hb, fill = list(n = 0)) %>%
   arrange(Negeri, Tahun, Jenis)
 
-# Bina Matriks Negeri
 matriks_negeri_wide_hb <- data_negeri_lengkap_hb %>%
   group_by(Negeri) %>%
   summarise(vector = list(n), .groups = "drop") 
 gabung_objektif_02_hb <- do.call(cbind, lapply(matriks_negeri_wide_hb$vector, as.numeric))
 colnames(gabung_objektif_02_hb) <- matriks_negeri_wide_hb$Negeri
 
-# Kira Korelasi Negeri
+# Korelasi Negeri
 Korelasi_Spearman_Negeri_hb <- cor(gabung_objektif_02_hb, method = "spearman", use = "pairwise.complete.obs")
 
 # 2. Visualisasi Heatmap
@@ -77,30 +59,19 @@ pheatmap(Korelasi_Spearman_Negeri_hb,
          main = paste("Korelasi Spearman Negeri:", target_kategori_hb),
          display_numbers = TRUE, number_format = "%.2f",
          color = colorRampPalette(c("blue", "white", "red"))(100))
-# ==============================================================================
-# 1. JANA DATA EDGES (PASANGAN NEGERI) DAHULU
-# ==============================================================================
-# Buat salinan matriks supaya matriks asal tak terganggu
 matriks_temp_hb <- Korelasi_Spearman_Negeri_hb
-
-# Buang bahagian bawah segitiga & diagonal (supaya tak berulang pasangan sama)
 matriks_temp_hb[lower.tri(matriks_temp_hb, diag = TRUE)] <- NA
-
-# Tukar kepada format senarai (Long Format)
 edges_negeri_hb <- as.data.frame(as.table(matriks_temp_hb)) %>%
   filter(!is.na(Freq)) %>%               # Buang nilai NA
   filter(abs(Freq) >= nilai_ambang_hb) %>% # Ambil nilai melebihi 0.9 sahaja
   rename(from = Var1, to = Var2, weight = Freq) %>%
   arrange(desc(weight))                  # Susun dari korelasi paling tinggi
-
-# SEMAKAN: Print di console untuk tengok ada data atau tak
 print(paste("Jumlah pasangan dijumpai:", nrow(edges_negeri_hb)))
 
 if(nrow(edges_negeri_hb) == 0) {
   warning("TIADA DATA: Tiada pasangan negeri yang mempunyai korelasi melebihi 0.9. Sila rendahkan 'nilai_ambang_hb'.")
 }
 
-# 3. Plot Rangkaian Negeri
 matriks_temp_hb <- Korelasi_Spearman_Negeri_hb
 matriks_temp_hb[lower.tri(matriks_temp_hb, diag = TRUE)] <- NA
 edges_negeri_hb <- as.data.frame(as.table(matriks_temp_hb)) %>%
@@ -127,8 +98,6 @@ plot_negeri_hb <- ggraph(lay_negeri_hb) +
   labs(title = paste("Rangkaian Negeri:", target_kategori_hb), subtitle = paste("r >=", nilai_ambang_hb))
 
 print(plot_negeri_hb)
-
-# 4. Jadual Centrality
 df_Centrality_Negeri_hb <- data.frame(
   Negeri = V(g_negeri_hb)$name,
   Degree = degree(g_negeri_hb),
@@ -136,38 +105,26 @@ df_Centrality_Negeri_hb <- data.frame(
   Betweenness = round(betweenness(g_negeri_hb, normalized = TRUE), 4)
 ) %>% arrange(desc(Degree))
 rownames(df_Centrality_Negeri_hb) <- NULL
-
-message("\n>>> JADUAL KIRAAN CENTRALITY (NEGERI) HARTA BENDA <<<")
 print(df_Centrality_Negeri_hb)
-
-# ==============================================================================
-# BAHAGIAN B: OBJEKTIF 2 (GABUNGAN DAERAH) - MASTER SKELETON FIX
-# ==============================================================================
-message(">>> Memulakan Objektif 2: Analisis Gabungan (Master Skeleton)...")
 
 Daerah_HartaBenda_raw <- read_excel(path_daerah)
 df_daerah_raw_hb <- Daerah_HartaBenda_raw %>% 
   filter(Kategori == target_kategori_hb, between(Tahun, tahun_mula_hb, tahun_akhir_hb))
-
 edges_all_combined_hb <- data.frame() 
 LIST_KORELASI_ND_hb <- data.frame() 
 senarai_negeri_hb <- unique(df_daerah_raw_hb$Negeri)
-
-# Skeleton untuk gabungan daerah
 master_jenis_hb <- sort(unique(data_negeri_clean_hb$Jenis)) 
 master_tahun_hb <- tahun_mula_hb:tahun_akhir_hb
 master_skeleton_hb <- expand.grid(Tahun = master_tahun_hb, Jenis = master_jenis_hb, stringsAsFactors = FALSE) %>% arrange(Tahun, Jenis)
 
 for(negeri_semasa in senarai_negeri_hb) {
-  
-  # 1. VEKTOR NEGERI
+
   vec_negeri_check_hb <- data_negeri_clean_hb %>%
     filter(Negeri == negeri_semasa) %>%
     right_join(master_skeleton_hb, by = c("Tahun", "Jenis")) %>% 
     mutate(n = ifelse(is.na(n), 0, n)) %>% arrange(Tahun, Jenis)
   vec_negeri_semasa_hb <- vec_negeri_check_hb$n
   
-  # 2. VEKTOR DAERAH
   data_sub_hb <- df_daerah_raw_hb %>%
     filter(Negeri == negeri_semasa) %>%
     mutate(ID_Daerah = paste0(Negeri, "_", Daerah)) %>% 
@@ -194,7 +151,6 @@ for(negeri_semasa in senarai_negeri_hb) {
   
   if(ncol(matriks_sub_hb) < 2) next 
   
-  # 3. PENGIRAAN KORELASI
   # A. Daerah-Daerah (Guna ambang 0.9)
   cor_sub_hb <- cor(matriks_sub_hb, method = "spearman", use = "pairwise.complete.obs")
   cor_sub_hb[lower.tri(cor_sub_hb, diag=TRUE)] <- NA 
@@ -222,7 +178,6 @@ for(negeri_semasa in senarai_negeri_hb) {
   }
 }
 
-# Output Jadual Korelasi
 message("\n>>> JADUAL ANALISIS: KORELASI NEGERI VS DAERAH (HB) <<<")
 print(head(LIST_KORELASI_ND_hb %>% arrange(Negeri, desc(Korelasi)), 20))
 view(LIST_KORELASI_ND_hb)
@@ -237,30 +192,24 @@ nodes_final_hb <- data.frame(name = unique(c(all_edges_final_hb$from, all_edges_
 g_clean_hb <- graph_from_data_frame(all_edges_final_hb, vertices = nodes_final_hb, directed = FALSE)
 V(g_clean_hb)$deg <- degree(g_clean_hb)
 
-#PLOT GABUNGAN RANGKAIAN
-# 1. Gabungkan Semua Edges
+
 edges_nn_hb <- edges_negeri_hb %>% mutate(type = "Negeri-Negeri")
 all_edges_final_hb <- bind_rows(edges_all_combined_hb, edges_nn_hb)
 
-# 2. Cipta Nodes & Tentukan Level (FIX: Guna Underscore '_' untuk detect Daerah)
 nodes_final_hb <- data.frame(name = unique(c(all_edges_final_hb$from, all_edges_final_hb$to))) %>%
   mutate(
     # Logik Baru: Kalau ada "_", ia confirm Daerah. Kalau takde, ia Negeri.
     level = ifelse(grepl("_", name), "Daerah", "Negeri"),
     
-    # Bersihkan nama untuk label (buang nama negeri depan)
     short_name = ifelse(level == "Daerah", sub(".*_", "", name), name)
   ) 
 
-# 3. Bina Graph Object
 g_clean_hb <- graph_from_data_frame(all_edges_final_hb, vertices = nodes_final_hb, directed = FALSE)
 V(g_clean_hb)$deg <- degree(g_clean_hb)
 
-# 4. Plot Rangkaian (Warna Turquoise & Kuning)
 set.seed(42) 
 p_network_final_hb <- ggraph(g_clean_hb, layout = "kk") +
   
-  # A. Garisan (Edges) - Legend Bahasa Melayu
   geom_edge_link(aes(color = type, width = abs(weight)), alpha = 0.6) + 
   
   scale_edge_color_manual(
@@ -268,7 +217,6 @@ p_network_final_hb <- ggraph(g_clean_hb, layout = "kk") +
                "State_District" = "blue", 
                "District_District" = "darkgreen"),
     
-    # Label Legend Melayu
     labels = c("Daerah-Daerah", "Negeri-Daerah", "Negeri-Negeri"),
     breaks = c("District_District", "State_District", "Negeri-Negeri"),
     
@@ -277,17 +225,13 @@ p_network_final_hb <- ggraph(g_clean_hb, layout = "kk") +
   
   scale_edge_width(range = c(0.5, 1.5), guide = "none") +
   
-  # B. Titik (Nodes) - Fill ikut Level (Negeri vs Daerah)
-  # shape = 21 membolehkan 'fill' (warna dalam) dan 'color' (border hitam)
   geom_node_point(aes(size = deg, fill = level), shape = 21, color = "black", stroke = 0.3) +
   
-  # C. Warna Titik: Negeri = Turquoise, Daerah = Kuning
   scale_fill_manual(
     values = c("Negeri" = "mediumorchid", "Daerah" = "yellow"), 
     name = "Peringkat"
   ) +
   
-  # D. Label
   geom_node_text(aes(label = short_name), repel = TRUE, size = 2.5, max.overlaps = Inf, fontface = "bold") +
   
   theme_void() +
@@ -295,10 +239,8 @@ p_network_final_hb <- ggraph(g_clean_hb, layout = "kk") +
        subtitle = paste("Analisis Jenayah Harta Benda"))
 
 print(p_network_final_hb)
-# ==============================================================================
+
 # BAHAGIAN C: OBJEKTIF 3 (LOUVAIN & PETA NEGERI - RENAMED)
-# ==============================================================================
-message(">>> Memulakan Objektif 3: Louvain Negeri (Harta Benda)...")
 
 set.seed(42)
 comm_negeri_hb <- cluster_louvain(g_negeri_hb, weights = E(g_negeri_hb)$w_abs)
@@ -317,7 +259,6 @@ comm_df_hb <- tibble(
 ) %>% arrange(Komuniti, desc(Degree), Negeri)
 print(comm_df_hb)
 
-# Plot Louvain Negeri (Warna Fixed HB)
 plot_louvain_negeri_hb <- ggraph(g_negeri_hb, layout = "kk") +
   geom_mark_hull(aes(x, y, fill = Label), concavity = 1, alpha = 0.2, show.legend = TRUE) +
   geom_edge_link(aes(width = w_abs), alpha = 0.5, color = "grey50") +
@@ -357,9 +298,7 @@ plot_peta_negeri_hb <- ggplot(peta_negeri_final_hb) +
        subtitle = paste("Bilangan Komuniti =", num_comm_negeri_hb, "| Q =", round(mod_score_negeri_hb, 3)))
 print(plot_peta_negeri_hb)
 
-# ==============================================================================
-# BAHAGIAN C-2: ANALISIS STATUS KESELAMATAN & PROFIL DOMINASI (HB - FIXED)
-# ==============================================================================
+# BAHAGIAN C-2: ANALISIS STATUS KESELAMATAN & PROFIL DOMINASI 
 message(">>> Memulakan Analisis Kesimpulan: Status Keselamatan & Profil (HB)...")
 
 # Pastikan info komuniti wujud
@@ -620,51 +559,3 @@ print(plot_map_index_hb)
 
 Jadual_Indeks_hb <- data_berwarna_index_hb %>% st_drop_geometry() %>% select(Indeks_ID, Daerah_Map, Komuniti_ID, Negeri_Asal) %>% arrange(Indeks_ID)
 View(Jadual_Indeks_hb)
-
-
-# ==============================================================================
-# BAHAGIAN E: ANALISIS PURATA BEBAN JENAYAH (DAERAH) - HB
-# ==============================================================================
-message(">>> Memulakan Analisis Beban Jenayah & Risiko Daerah (HB)...")
-
-analisis_daerah_raw_hb <- df_daerah_raw_hb %>%
-  mutate(ID_Node = paste0(Negeri, "_", Daerah)) %>%
-  group_by(ID_Node) %>%
-  summarise(Total_Kes_Semua_Tahun = sum(Bilangan, na.rm = TRUE), .groups = "drop")
-
-info_komuniti_daerah_hb <- data.frame(
-  ID_Node = V(g_clean_hb)$name,
-  Komuniti = factor(V(g_clean_hb)$community)
-) %>% filter(grepl("_", ID_Node))
-
-analisis_risiko_daerah_hb <- analisis_daerah_raw_hb %>%
-  inner_join(info_komuniti_daerah_hb, by = "ID_Node") %>%
-  group_by(Komuniti) %>%
-  summarise(
-    Bil_Daerah = n(), 
-    Total_Kes_Komuniti = sum(Total_Kes_Semua_Tahun),
-    Purata_Beban_Tahunan = (Total_Kes_Komuniti / (tahun_akhir_hb - tahun_mula_hb + 1)) / Bil_Daerah
-  ) %>%
-  arrange(desc(Purata_Beban_Tahunan)) %>%
-  mutate(
-    Status_Keselamatan = case_when(
-      Purata_Beban_Tahunan >= quantile(Purata_Beban_Tahunan, 0.66) ~ "BERISIKO",
-      Purata_Beban_Tahunan >= quantile(Purata_Beban_Tahunan, 0.33) ~ "SEDERHANA",
-      TRUE ~ "SELAMAT"
-    )
-  )
-
-message("\n>>> JADUAL ANALISIS RISIKO KOMUNITI DAERAH (HB) <<<")
-print(analisis_risiko_daerah_hb)
-
-plot_risiko_daerah_hb <- ggplot(analisis_risiko_daerah_hb, aes(x = reorder(Komuniti, -Purata_Beban_Tahunan), 
-                                                               y = Purata_Beban_Tahunan, 
-                                                               fill = Status_Keselamatan)) +
-  geom_bar(stat = "identity", width = 0.7) +
-  geom_text(aes(label = round(Purata_Beban_Tahunan, 0)), vjust = -0.5, size = 3, fontface = "bold") +
-  scale_fill_manual(values = c("BERISIKO" = "#FF4D4D", "SEDERHANA" = "#FFD700", "SELAMAT" = "#66CC66")) +
-  theme_minimal() +
-  labs(title = paste("Analisis Risiko Komuniti Daerah:", target_kategori_hb),
-       x = "Komuniti Daerah", y = "Purata Kes Setahun (Per Daerah)", fill = "Status Risiko")
-
-print(plot_risiko_daerah_hb)
